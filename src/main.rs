@@ -1,4 +1,4 @@
-use omega_tile::{cache, ts, Atlas, Error};
+use omega_tile::{cache, ts, Atlas, Error, WTileSet};
 use std::path::Path;
 use structopt::StructOpt;
 use ts::image::{DynamicImage, GenericImage, GenericImageView};
@@ -44,6 +44,36 @@ fn build_combine_img(atlas: &Atlas) -> Result<DynamicImage, Error> {
     Ok(combined)
 }
 
+fn build_tileset(tiles: &WTileSet) -> Result<DynamicImage, Error> {
+    fn nearest_sqrt(n: u32) -> u32 {
+        let mut i = 0u32;
+        while n > i * i {
+            i += 1
+        }
+        i
+    }
+
+    let dim = tiles[0].img.dimensions();
+    // find nearest square
+    let n = nearest_sqrt(tiles.len() as u32);
+    let mut combined = DynamicImage::new_rgb8(dim.0 * n, dim.1 * n);
+
+    let iter = (0..n).flat_map(|y| (0..n).map(move |x| (x, y)));
+    let iter = iter.take(tiles.len());
+
+    for (i, (x, y)) in iter.enumerate() {
+        if !combined.copy_from(
+            &tiles[i].img.view(0, 0, dim.0, dim.1),
+            (x as u32) * dim.0,
+            (y as u32) * dim.1,
+        ) {
+            Err(Error::SizeMismatch)?;
+        }
+    }
+
+    Ok(combined)
+}
+
 fn main() -> Result<(), Error> {
     let cmd = Command::from_args();
 
@@ -57,7 +87,7 @@ fn main() -> Result<(), Error> {
             size,
             simple,
             combined,
-            print_index
+            print_index,
         } => {
             let output = Path::new(&input)
                 .file_stem()
@@ -81,7 +111,7 @@ fn main() -> Result<(), Error> {
 
             let combined_size = size;
             let atlas = omega_tile::build_atlas(&tiles, combined_size);
-            
+
             if combined {
                 let combined = build_combine_img(&atlas)?;
                 combined.save(format!(
@@ -90,16 +120,21 @@ fn main() -> Result<(), Error> {
                 ))?;
             }
 
-            let indices = atlas.build_indices();            
+            let indices = atlas.build_indices();
             indices.save(format!(
                 "out/{}_indices_{}x{}.bmp",
+                output, combined_size, combined_size
+            ))?;
+
+            let tileset = build_tileset(&tiles)?;
+            tileset.save(format!(
+                "out/{}_tileset_{}x{}.png",
                 output, combined_size, combined_size
             ))?;
 
             if print_index {
                 println!("{}", atlas);
             }
-            
         }
     }
     Ok(())
