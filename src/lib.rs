@@ -21,7 +21,7 @@ use wtile::WTile;
 pub use atlas::{build_atlas, Atlas};
 pub use error::Error;
 pub use texture_synthesis as ts;
-use ts::image::{DynamicImage, GenericImage, GenericImageView, Rgba, Luma};
+use ts::image::{DynamicImage, GenericImage, GenericImageView, Luma, Pixel, Rgba};
 
 pub type WTileSet = Vec<WTile>;
 
@@ -30,47 +30,88 @@ struct WTileContext {
 }
 
 impl WTileContext {
-    fn build_samples<Q>(&mut self, path: Q) -> Result<Vec<DynamicImage>, Error>
+    fn build_samples<Q>(&mut self, mode: SampleMode, path: Q) -> Result<Vec<DynamicImage>, Error>
     where
         Q: AsRef<Path>,
     {
-        let mut result = vec![];
+        match mode {
+            SampleMode::Generate => {
+                let dim = {
+                    let img = ts::image::open(&path).map_err(|_| {
+                        std::io::Error::new(std::io::ErrorKind::NotFound, "Not Found")
+                    })?;
+                    img.dimensions()
+                };
 
-        let dim = {
-            let img = ts::image::open(&path)
-                .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "Not Found"))?;
-            img.dimensions()
-        };
+                let build_sample = |id| -> Result<_, Error> {
+                    let key = format!(
+                        "{}+{}+{}+{}+samples",
+                        dim.0,
+                        dim.1,
+                        &path.as_ref().to_string_lossy(),
+                        id
+                    );
+                    if let Some(img) = cache::read_cache(&key) {
+                        Ok(img)
+                    } else {
+                        let texsynth = ts::Session::builder()
+                            .add_example(&path)
+                            .output_size(ts::Dims::new(dim.0, dim.1))
+                            .seed(id)
+                            .build()?;
+                        let generated =
+                            texsynth.run(Some(Box::new(self.pb.new_sub_progress("build sample"))));
+                        let img = generated.into_image();
+                        cache::write_cache(&key, &img)?;
+                        Ok(img)
+                    }
+                };
 
-        let build_sample = |id| -> Result<_, Error> {
-            let key = format!(
-                "{}+{}+{}+{}+samples",
-                dim.0,
-                dim.1,
-                &path.as_ref().to_string_lossy(),
-                id
-            );
-            if let Some(img) = cache::read_cache(&key) {
-                Ok(img)
-            } else {
-                let texsynth = ts::Session::builder()
-                    .add_example(&path)
-                    .output_size(ts::Dims::new(dim.0, dim.1))
-                    .seed(id)
-                    .build()?;
-                let generated =
-                    texsynth.run(Some(Box::new(self.pb.new_sub_progress("build sample"))));
-                let img = generated.into_image();
-                cache::write_cache(&key, &img)?;
-                Ok(img)
+                let mut result = vec![];
+                for i in 1..=4 {
+                    result.push(build_sample(i)?);
+                }
+                Ok(result)
             }
-        };
+            SampleMode::Split => {
+                let img = ts::image::open(&path)
+                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "Not Found"))?;
 
-        for i in 1..=4 {
-            result.push(build_sample(i)?);
+                // Check if its squared
+                let dims = img.dimensions();
+                if !is_splitable(dims) {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Give texture size is invalide. (Must be square and even",
+                    );
+                }
+
+                let half = dims.0 / 2;
+                let mut result: Vec<DynamicImage> = vec![];
+
+                result.push(DynamicImage::ImageRgba8(
+                    img.view(0, 0, half, half).to_image(),
+                ));
+                result.push(DynamicImage::ImageRgba8(
+                    img.view(0, half, half, half).to_image(),
+                ));
+                result.push(DynamicImage::ImageRgba8(
+                    img.view(half, 0, half, half).to_image(),
+                ));
+                result.push(DynamicImage::ImageRgba8(
+                    img.view(half, half, half, half).to_image(),
+                ));
+
+                return Ok(result);
+
+                fn is_splitable(dims: (u32, u32)) -> bool {
+                    if dims.0 == 0 || dims.0 != dims.1 {
+                        return false;
+                    }
+                    dims.0 % 2 == 0
+                }
+            }
         }
-
-        Ok(result)
     }
 
     fn merge_samples(
@@ -114,20 +155,22 @@ impl WTileContext {
         Ok(res)
     }
 
+    /// Build a cross star like mask
     fn build_mask(&self, (w, h): (u32, u32)) -> Result<DynamicImage, Error> {
         let mut res = DynamicImage::new_rgb8(w, h);
         for i in 0..w {
             for j in 0..h {
-                res.put_pixel(i, j, Rgba([255u8, 255u8, 255u8, 255u8]));
+                res.put_pixel(i, j, Rgba([0, 0, 0, 0]));
             }
         }
 
-        draw_filled_circle_mut(
-            &mut res,
-            ((w as i32) / 2, (h as i32) / 2),
-            (w as i32) / 2,
-            Rgba([0, 0, 0, 255u8]),
-        );
+        let (w, h) = (w as i32, h as i32);
+
+        draw_filled_circle_mut(&mut res, (0, 0), w / 2, Rgba([255u8, 255u8, 255u8, 255u8]));
+        draw_filled_circle_mut(&mut res, (w, 0), w / 2, Rgba([255u8, 255u8, 255u8, 255u8]));
+        draw_filled_circle_mut(&mut res, (0, h), w / 2, Rgba([255u8, 255u8, 255u8, 255u8]));
+        draw_filled_circle_mut(&mut res, (w, h), w / 2, Rgba([255u8, 255u8, 255u8, 255u8]));
+
         Ok(res)
     }
 
@@ -135,15 +178,18 @@ impl WTileContext {
         &mut self,
         merged: &DynamicImage,
         mask: &DynamicImage,
-        base: Q,
+        _base: Q,
+        samples: &[DynamicImage],
     ) -> Result<DynamicImage, Error>
     where
         Q: AsRef<Path>,
     {
         let output_dim = mask.dimensions();
 
+        let examples: Vec<_> = samples.iter().map(|it| it.clone()).collect();
+
         let texsynth = ts::Session::builder()
-            .add_examples(&[base])
+            .add_examples(examples.into_iter())
             .inpaint_example(
                 mask.clone(),
                 // This will prevent sampling from the imgs/2.jpg, note that
@@ -269,12 +315,22 @@ impl WTileContext {
     }
 }
 
-pub fn build(base: &str, variation: usize) -> Result<WTileSet, Error> {
+pub enum SampleMode {
+    Generate,
+    Split,
+}
+
+pub fn build(mode: SampleMode, base: &str, variation: usize) -> Result<WTileSet, Error> {
     let mut ctx = WTileContext {
-        pb: SimpleProgressReport::new()
+        pb: SimpleProgressReport::new(),
     };
-    
-    let samples = ctx.build_samples(&base)?;
+
+    let samples = ctx.build_samples(mode, &base)?;
+
+    for (i, it) in samples.iter().enumerate() {
+        it.save(format!("out/{}_samples{}.png", "output", i + 1))?;
+    }
+
     let mask = ctx.build_mask(samples[0].dimensions())?;
 
     ctx.build_n_w_tiles(variation, &samples, &mask, &base)

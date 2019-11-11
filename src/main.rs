@@ -1,4 +1,4 @@
-use omega_tile::{cache, ts, Atlas, Error, WTileSet};
+use omega_tile::{cache, ts, Atlas, Error, SampleMode, WTileSet};
 use std::path::Path;
 use structopt::StructOpt;
 use ts::image::{DynamicImage, GenericImage, GenericImageView};
@@ -115,7 +115,7 @@ fn main() -> Result<(), Error> {
                 })?;
 
             let variation = if simple { 4 } else { 16 };
-            let tiles = omega_tile::build(&input, variation)?;
+            let tiles = omega_tile::build(SampleMode::Split, &input, variation)?;
 
             for (i, t) in tiles.iter().enumerate() {
                 t.img.save(format!("out/{}_final{}.png", output, i + 1))?;
