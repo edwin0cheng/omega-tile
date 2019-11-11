@@ -1,9 +1,9 @@
-use texture_synthesis as ts;
-use ts::image::{DynamicImage};
-use sha2::{Sha256, Digest};
-use hex;
 use crate::error::Error;
+use hex;
+use sha2::{Digest, Sha256};
 use std::fs::{self, ReadDir};
+use texture_synthesis as ts;
+use ts::image::DynamicImage;
 
 pub(crate) fn read_cache(key: &str) -> Option<DynamicImage> {
     let mut hasher = Sha256::new();

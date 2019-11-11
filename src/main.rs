@@ -20,6 +20,18 @@ enum Command {
         input: String,
         size: u32,
     },
+    TestSet {
+        #[structopt(short, long)]
+        simple: bool,
+
+        #[structopt(short, long)]
+        combined: bool,
+
+        #[structopt(short, long)]
+        print_index: bool,
+
+        size: u32,
+    },
 }
 
 fn build_combine_img(atlas: &Atlas) -> Result<DynamicImage, Error> {
@@ -108,6 +120,44 @@ fn main() -> Result<(), Error> {
             for (i, t) in tiles.iter().enumerate() {
                 t.img.save(format!("out/{}_final{}.png", output, i + 1))?;
             }
+
+            let combined_size = size;
+            let atlas = omega_tile::build_atlas(&tiles, combined_size);
+
+            if combined {
+                let combined = build_combine_img(&atlas)?;
+                combined.save(format!(
+                    "out/{}_combined_{}x{}.png",
+                    output, combined_size, combined_size
+                ))?;
+            }
+
+            let indices = atlas.build_indices();
+            indices.save(format!(
+                "out/{}_indices_{}x{}.bmp",
+                output, combined_size, combined_size
+            ))?;
+
+            let tileset = build_tileset(&tiles)?;
+            tileset.save(format!(
+                "out/{}_tileset_{}x{}.png",
+                output, combined_size, combined_size
+            ))?;
+
+            if print_index {
+                println!("{}", atlas);
+            }
+        }
+        Command::TestSet {
+            size,
+            combined,
+            simple,
+            print_index,
+        } => {
+            let output = "test_set";
+
+            let variation = if simple { 4 } else { 16 };
+            let tiles = omega_tile::build_testset(variation)?;
 
             let combined_size = size;
             let atlas = omega_tile::build_atlas(&tiles, combined_size);

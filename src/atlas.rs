@@ -97,24 +97,32 @@ pub fn build_atlas(tiles: &Vec<WTile>, n: u32) -> Atlas {
         res
     };
 
+    // Simple order
+    // let iter = (0..n).flat_map(|y| (0..n).map(move |x| (x, y)));
+
+    // first row and left most order
+    let first_row = (0..n).map(|x| (0, x));
+    let first_col = (1..n).map(|y| (y, 0));
+    let inner_iter = (1..n).flat_map(|y| (1..n).map(move |x| (x, y)));
+    let iter = first_row.chain(first_col).chain(inner_iter);
+
     // Generate a combined image
     // let dir = (usize,usize);
-    for y in 0..(n as i32) {
-        for x in 0..(n as i32) {
-            let mut list = shuffle();
-            let mut success = false;
 
-            while let Some(cur) = list.pop() {
-                if fit(x, y, &cur.1, &atlas) {
-                    atlas.insert((x, y), cur);
-                    success = true;
-                    break;
-                }
-            }
+    for (x, y) in iter {
+        let mut list = shuffle();
+        let mut success = false;
 
-            if !success {
-                panic!("Generate combined image fail!");
+        while let Some(cur) = list.pop() {
+            if fit(x as i32, y as i32, &cur.1, &atlas) {
+                atlas.insert((x as i32, y as i32), cur);
+                success = true;
+                break;
             }
+        }
+
+        if !success {
+            panic!("Generate combined image fail!");
         }
     }
 

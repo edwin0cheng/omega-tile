@@ -160,15 +160,9 @@ impl WTileContext {
         Ok(generated.into_image())
     }
 
-    fn build_n_w_tiles<Q>(
-        &mut self,
-        n_tiles: usize,
-        samples: &[DynamicImage],
-        mask: &DynamicImage,
-        base: Q,
-    ) -> Result<Vec<WTile>, Error>
+    fn build_n_w_tiles_with_generator<F>(n_tiles: usize, mut gen: F) -> Result<Vec<WTile>, Error>
     where
-        Q: AsRef<Path> + std::fmt::Display,
+        F: FnMut(usize, usize, usize, usize) -> Result<DynamicImage, Error>,
     {
         macro_rules! rgby {
             (R) => {
@@ -189,24 +183,7 @@ impl WTileContext {
 
         macro_rules! make_tile {
             ($a:ident, $b:ident, $c:ident, $d:ident) => {
-                let key = format!(
-                    "{}+{}+{}+{}+{}+{}",
-                    n_tiles,
-                    base,
-                    rgby!($a),
-                    rgby!($b),
-                    rgby!($c),
-                    rgby!($d)
-                );
-                let img = if let Some(img) = cache::read_cache(&key) {
-                    img
-                } else {
-                    let merged =
-                        self.merge_samples(&samples, rgby!($a), rgby!($b), rgby!($c), rgby!($d))?;
-                    let img = self.build_tile(&merged, &mask, &base)?;
-                    cache::write_cache(&key, &img)?;
-                    img
-                };
+                let img = gen(rgby!($a), rgby!($b), rgby!($c), rgby!($d))?;
                 res.push(WTile::new(img, rgby!($a), rgby!($b), rgby!($c), rgby!($d)));
             };
         }
@@ -246,6 +223,50 @@ impl WTileContext {
 
         Ok(res)
     }
+
+    fn build_n_w_tiles<Q>(
+        &mut self,
+        n_tiles: usize,
+        samples: &[DynamicImage],
+        mask: &DynamicImage,
+        base: Q,
+    ) -> Result<Vec<WTile>, Error>
+    where
+        Q: AsRef<Path> + std::fmt::Display,
+    {
+        Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
+            let key = format!("{}+{}+{}+{}+{}+{}", n_tiles, base, a, b, c, d);
+            let img = if let Some(img) = cache::read_cache(&key) {
+                img
+            } else {
+                let merged = self.merge_samples(&samples, a, b, c, d)?;
+                let img = self.build_tile(&merged, &mask, &base, &samples)?;
+                cache::write_cache(&key, &img)?;
+                img
+            };
+
+            Ok(img)
+        })
+    }
+
+    fn build_test_tiles(
+        &mut self,
+        n_tiles: usize,
+        samples: &[DynamicImage],
+    ) -> Result<Vec<WTile>, Error> {
+        Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
+            let key = format!("{}+{}+{}+{}+{}+{}", n_tiles, "test", a, b, c, d);
+            let img = if let Some(img) = cache::read_cache(&key) {
+                img
+            } else {
+                let img = self.merge_samples(&samples, a, b, c, d)?;
+                cache::write_cache(&key, &img)?;
+                img
+            };
+
+            Ok(img)
+        })
+    }
 }
 
 pub fn build(base: &str, variation: usize) -> Result<WTileSet, Error> {
@@ -257,4 +278,42 @@ pub fn build(base: &str, variation: usize) -> Result<WTileSet, Error> {
     let mask = ctx.build_mask(samples[0].dimensions())?;
 
     ctx.build_n_w_tiles(variation, &samples, &mask, &base)
+}
+
+pub fn build_testset(variation: usize) -> Result<WTileSet, Error> {
+    let mut ctx = WTileContext {
+        pb: SimpleProgressReport::new(),
+    };
+
+    let samples = {
+        let mut samples: Vec<DynamicImage> = Vec::new();
+
+        fn fill(img: &mut DynamicImage, color: Rgba<u8>) {
+            let dim = img.dimensions();
+            for y in 0..dim.1 {
+                for x in 0..dim.0 {
+                    img.put_pixel(x, y, color);
+                }
+            }
+        }
+
+        let mut r_img = DynamicImage::new_rgb8(256, 256);
+        let mut g_img = DynamicImage::new_rgb8(256, 256);
+        let mut b_img = DynamicImage::new_rgb8(256, 256);
+        let mut y_img = DynamicImage::new_rgb8(256, 256);
+
+        fill(&mut r_img, Rgba::from_channels(255, 0, 0, 255));
+        fill(&mut g_img, Rgba::from_channels(0, 255, 0, 255));
+        fill(&mut b_img, Rgba::from_channels(0, 0, 255, 255));
+        fill(&mut y_img, Rgba::from_channels(128, 128, 128, 255));
+
+        samples.push(r_img);
+        samples.push(g_img);
+        samples.push(b_img);
+        samples.push(y_img);
+
+        samples
+    };
+
+    ctx.build_test_tiles(variation, &samples)
 }

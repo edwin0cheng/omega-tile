@@ -1,7 +1,7 @@
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use texture_synthesis as ts;
 use std::cell::RefCell;
 use std::rc::Rc;
+use texture_synthesis as ts;
 
 pub struct SimpleProgressReport {
     ctx: Rc<RefCell<SimpleProgressContext>>,
@@ -10,7 +10,7 @@ pub struct SimpleProgressReport {
 impl SimpleProgressReport {
     pub fn new() -> SimpleProgressReport {
         SimpleProgressReport {
-            ctx: Rc::new(RefCell::new(SimpleProgressContext::new()))
+            ctx: Rc::new(RefCell::new(SimpleProgressContext::new())),
         }
     }
 
@@ -39,7 +39,7 @@ struct SimpleProgressContext {
 }
 
 impl SimpleProgressContext {
-    pub(crate) fn new() -> SimpleProgressContext {       
+    pub(crate) fn new() -> SimpleProgressContext {
         let multi_pb = MultiProgress::new();
         let sty = ProgressStyle::default_bar()
             .template("[{msg:<20}] {bar:40.cyan/blue} {percent}%")
@@ -86,10 +86,10 @@ impl Drop for SimpleProgressContext {
 impl ts::GeneratorProgress for SubProgressReport {
     fn update(&mut self, update: ts::ProgressUpdate<'_>) {
         let mut ctx = self.ctx.borrow_mut();
-        
+
         if update.total.total != ctx.total_len {
             ctx.total_len = update.total.total;
-            ctx.total_pb.set_length(ctx.total_len as u64);            
+            ctx.total_pb.set_length(ctx.total_len as u64);
         }
 
         if update.stage.total != ctx.stage_len {
