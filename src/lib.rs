@@ -25,6 +25,41 @@ use ts::image::{DynamicImage, GenericImage, GenericImageView, Luma, Pixel, Rgba}
 
 pub type WTileSet = Vec<WTile>;
 
+#[derive(Debug, Copy, Clone)]
+pub enum WTileVariation {
+    /// 4 tiles version
+    V4,
+    /// 16 tiles version
+    V16,
+    /// 256 Full version
+    Full,
+}
+
+impl std::str::FromStr for WTileVariation {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "v4" => Ok(WTileVariation::V4),
+            "v16" => Ok(WTileVariation::V16),
+            "full" => Ok(WTileVariation::Full),
+            _ => Err(Error::ParseError("Not a valid variation".into())),
+        }
+    }
+}
+
+impl std::fmt::Display for WTileVariation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        let s = match self {
+            WTileVariation::V4 => "v4",
+            WTileVariation::V16 => "v16",
+            WTileVariation::Full => "full",
+        };
+        
+        write!(f, "{}", s)
+    }
+}
+
 struct WTileContext {
     pb: SimpleProgressReport,
 }
@@ -206,7 +241,10 @@ impl WTileContext {
         Ok(generated.into_image())
     }
 
-    fn build_n_w_tiles_with_generator<F>(n_tiles: usize, mut gen: F) -> Result<Vec<WTile>, Error>
+    fn build_n_w_tiles_with_generator<F>(
+        n_tiles: WTileVariation,
+        mut gen: F,
+    ) -> Result<Vec<WTile>, Error>
     where
         F: FnMut(usize, usize, usize, usize) -> Result<DynamicImage, Error>,
     {
@@ -235,36 +273,70 @@ impl WTileContext {
         }
 
         match n_tiles {
-            4 => {
+            // 4
+            WTileVariation::V4 => {
                 // Figure 7(a)
                 make_tile!(R, G, B, Y);
                 make_tile!(G, B, Y, R);
                 make_tile!(B, Y, R, G);
                 make_tile!(Y, R, G, B);
             }
-            16 => {
-                // Figure 8(b)
-                make_tile!(R, G, G, Y);
-                make_tile!(R, B, G, R);
-                make_tile!(R, B, B, Y);
-                make_tile!(R, G, B, R);
+            WTileVariation::V16 => {
+                // // Figure 8(b)
+                // make_tile!(R, G, G, Y);
+                // make_tile!(R, B, G, R);
+                // make_tile!(R, B, B, Y);
+                // make_tile!(R, G, B, R);
 
-                make_tile!(Y, G, G, R);
-                make_tile!(Y, B, G, Y);
-                make_tile!(Y, G, B, Y);
-                make_tile!(Y, B, B, R);
+                // make_tile!(Y, G, G, R);
+                // make_tile!(Y, B, G, Y);
+                // make_tile!(Y, G, B, Y);
+                // make_tile!(Y, B, B, R);
 
-                make_tile!(B, R, R, B);
-                make_tile!(B, Y, R, G);
-                make_tile!(B, R, Y, G);
-                make_tile!(B, Y, Y, B);
+                // make_tile!(B, R, R, B);
+                // make_tile!(B, Y, R, G);
+                // make_tile!(B, R, Y, G);
+                // make_tile!(B, Y, Y, B);
 
-                make_tile!(G, R, R, G);
-                make_tile!(G, Y, R, B);
-                make_tile!(G, R, Y, B);
+                // make_tile!(G, R, R, G);
+                // make_tile!(G, Y, R, B);
+                // make_tile!(G, R, Y, B);
+                // make_tile!(G, Y, Y, G);
+
+                // Figure 8(a)
+                make_tile!(R, G, G, B);
+                make_tile!(R, B, G, Y);
+                make_tile!(R, G, B, Y);
+                make_tile!(R, B, B, R);
+
+                make_tile!(G, B, B, Y);
+                make_tile!(G, Y, B, R);
+                make_tile!(G, B, Y, R);
                 make_tile!(G, Y, Y, G);
+
+                make_tile!(B, Y, Y, R);
+                make_tile!(B, R, Y, G);
+                make_tile!(B, Y, R, G);
+                make_tile!(B, R, R, B);
+
+                make_tile!(Y, R, R, G);
+                make_tile!(Y, G, R, B);
+                make_tile!(Y, R, G, B);
+                make_tile!(Y, G, G, Y);
             }
-            _ => unimplemented!("Other tiles size is not supported right now"),
+
+            WTileVariation::Full => {
+                for a in 0..4 {
+                    for b in 0..4 {
+                        for c in 0..4 {
+                            for d in 0..4 {
+                                let img = gen(a, b, c, d)?;
+                                res.push(WTile::new(img, a, b, c, d));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(res)
@@ -272,7 +344,7 @@ impl WTileContext {
 
     fn build_n_w_tiles<Q>(
         &mut self,
-        n_tiles: usize,
+        n_tiles: WTileVariation,
         samples: &[DynamicImage],
         mask: &DynamicImage,
         base: Q,
@@ -297,7 +369,7 @@ impl WTileContext {
 
     fn build_test_tiles(
         &mut self,
-        n_tiles: usize,
+        n_tiles: WTileVariation,
         samples: &[DynamicImage],
     ) -> Result<Vec<WTile>, Error> {
         Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
@@ -320,23 +392,21 @@ pub enum SampleMode {
     Split,
 }
 
-pub fn build(mode: SampleMode, base: &str, variation: usize) -> Result<WTileSet, Error> {
+pub fn build(mode: SampleMode, base: &str, variation: WTileVariation) -> Result<(WTileSet, Vec<DynamicImage>), Error> {
     let mut ctx = WTileContext {
         pb: SimpleProgressReport::new(),
     };
 
-    let samples = ctx.build_samples(mode, &base)?;
-
-    for (i, it) in samples.iter().enumerate() {
-        it.save(format!("out/{}_samples{}.png", "output", i + 1))?;
-    }
+    let samples = ctx
+        .build_samples(mode, &base)
+        .map_err(|e| Error::General((Box::new(e), "Fail to build samples".to_string())))?;
 
     let mask = ctx.build_mask(samples[0].dimensions())?;
 
-    ctx.build_n_w_tiles(variation, &samples, &mask, &base)
+    Ok((ctx.build_n_w_tiles(variation, &samples, &mask, &base)?, samples))
 }
 
-pub fn build_testset(variation: usize) -> Result<WTileSet, Error> {
+pub fn build_testset(variation: WTileVariation) -> Result<WTileSet, Error> {
     let mut ctx = WTileContext {
         pb: SimpleProgressReport::new(),
     };

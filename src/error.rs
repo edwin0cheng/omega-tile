@@ -5,6 +5,8 @@ pub enum Error {
     TsError(ts::Error),
     Io(std::io::Error),
     SizeMismatch,
+    ParseError(String),
+    General((Box<Error>, String))
 }
 
 impl std::fmt::Display for Error {
@@ -13,6 +15,8 @@ impl std::fmt::Display for Error {
             Self::TsError(e) => write!(f, "{}", e),
             Self::Io(e) => write!(f, "{}", e),
             Self::SizeMismatch => write!(f, "Size mismatched"),
+            Self::ParseError(s) =>  write!(f, "Parse error: {}", s),
+            Self::General((err, reason)) =>  write!(f, "{} {}", reason, err),
         }
     }
 }

@@ -16,13 +16,7 @@ pub(crate) struct Edge(Direction, (usize, usize));
 
 impl Edge {
     pub fn is_match(&self, other: &Edge) -> bool {
-        match (&self.0, &other.0) {
-            (Direction::North, Direction::South)
-            | (Direction::South, Direction::North)
-            | (Direction::East, Direction::West)
-            | (Direction::West, Direction::East) => self.1 == other.1,
-            _ => false,
-        }
+        self.1 == other.1
     }
 }
 

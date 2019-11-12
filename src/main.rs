@@ -1,4 +1,4 @@
-use omega_tile::{cache, ts, Atlas, Error, SampleMode, WTileSet};
+use omega_tile::{cache, ts, Atlas, Error, SampleMode, WTileSet, WTileVariation};
 use std::path::Path;
 use structopt::StructOpt;
 use ts::image::{DynamicImage, GenericImage, GenericImageView};
@@ -9,7 +9,7 @@ enum Command {
     Clean,
     Build {
         #[structopt(short, long)]
-        simple: bool,
+        variation: WTileVariation,
 
         #[structopt(short, long)]
         combined: bool,
@@ -19,10 +19,13 @@ enum Command {
 
         input: String,
         size: u32,
+
+        #[structopt(short,long, default_value = "100")]
+        seed: u64,
     },
     TestSet {
         #[structopt(short, long)]
-        simple: bool,
+        variation: WTileVariation,
 
         #[structopt(short, long)]
         combined: bool,
@@ -31,6 +34,9 @@ enum Command {
         print_index: bool,
 
         size: u32,
+
+        #[structopt(short,long, default_value = "100")]
+        seed: u64,
     },
 }
 
@@ -97,9 +103,10 @@ fn main() -> Result<(), Error> {
         Command::Build {
             input,
             size,
-            simple,
+            variation,
             combined,
             print_index,
+            seed
         } => {
             let output = Path::new(&input)
                 .file_stem()
@@ -114,34 +121,38 @@ fn main() -> Result<(), Error> {
                     )
                 })?;
 
-            let variation = if simple { 4 } else { 16 };
-            let tiles = omega_tile::build(SampleMode::Split, &input, variation)?;
-
-            for (i, t) in tiles.iter().enumerate() {
-                t.img.save(format!("out/{}_final{}.png", output, i + 1))?;
+            let (tiles, samples) = omega_tile::build(SampleMode::Split, &input, variation)?;
+            for (i, it) in samples.iter().enumerate() {
+                let name = format!("out/{}_samples{}.png", output, i + 1);
+                it.save(&name)
+                    .map_err(|e| Error::General((Box::new(e.into()), format!("Fail to save samples to {}", name))))?;
             }
 
+            // for (i, t) in tiles.iter().enumerate() {
+            //     t.img.save(format!("out/{}_final{}.png", output, i + 1))?;
+            // }
+
             let combined_size = size;
-            let atlas = omega_tile::build_atlas(&tiles, combined_size);
+            let atlas = omega_tile::build_atlas(&tiles, combined_size, seed);
 
             if combined {
                 let combined = build_combine_img(&atlas)?;
                 combined.save(format!(
-                    "out/{}_combined_{}x{}.png",
-                    output, combined_size, combined_size
+                    "out/{}_combined_{}x{}_{}_{}.png",
+                    output, combined_size, combined_size, variation, seed
                 ))?;
             }
 
             let indices = atlas.build_indices();
             indices.save(format!(
-                "out/{}_indices_{}x{}.bmp",
-                output, combined_size, combined_size
+                "out/{}_indices_{}x{}_{}_{}.bmp",
+                output, combined_size, combined_size, variation, seed
             ))?;
 
             let tileset = build_tileset(&tiles)?;
             tileset.save(format!(
-                "out/{}_tileset_{}x{}.png",
-                output, combined_size, combined_size
+                "out/{}_tileset_{}x{}_{}_{}.png",
+                output, combined_size, combined_size, variation, seed
             ))?;
 
             if print_index {
@@ -151,35 +162,34 @@ fn main() -> Result<(), Error> {
         Command::TestSet {
             size,
             combined,
-            simple,
+            variation,
             print_index,
+            seed
         } => {
             let output = "test_set";
-
-            let variation = if simple { 4 } else { 16 };
             let tiles = omega_tile::build_testset(variation)?;
 
             let combined_size = size;
-            let atlas = omega_tile::build_atlas(&tiles, combined_size);
+            let atlas = omega_tile::build_atlas(&tiles, combined_size, seed);
 
             if combined {
                 let combined = build_combine_img(&atlas)?;
                 combined.save(format!(
-                    "out/{}_combined_{}x{}.png",
-                    output, combined_size, combined_size
+                    "out/{}_combined_{}x{}_{}_{}.png",
+                    output, combined_size, combined_size, variation, seed
                 ))?;
             }
 
             let indices = atlas.build_indices();
             indices.save(format!(
-                "out/{}_indices_{}x{}.bmp",
-                output, combined_size, combined_size
+                "out/{}_indices_{}x{}_{}_{}.bmp",
+                output, combined_size, combined_size, variation, seed
             ))?;
 
             let tileset = build_tileset(&tiles)?;
             tileset.save(format!(
-                "out/{}_tileset_{}x{}.png",
-                output, combined_size, combined_size
+                "out/{}_tileset_{}x{}_{}_{}.png",
+                output, combined_size, combined_size, variation, seed
             ))?;
 
             if print_index {

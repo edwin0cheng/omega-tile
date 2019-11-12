@@ -86,9 +86,9 @@ impl fmt::Display for Atlas {
     }
 }
 
-pub fn build_atlas(tiles: &Vec<WTile>, n: u32) -> Atlas {
+pub fn build_atlas(tiles: &Vec<WTile>, n: u32, seed: u64) -> Atlas {
     let mut atlas: HashMap<(i32, i32), (usize, WTile)> = HashMap::new();
-    let mut rng = StdRng::seed_from_u64(100);
+    let mut rng = StdRng::seed_from_u64(seed);
     let id_tiles: Vec<(usize, WTile)> = tiles.into_iter().cloned().enumerate().collect();
 
     let mut shuffle = || {
