@@ -1,7 +1,9 @@
+use imageproc::drawing;
 use omega_tile::{cache, ts, Atlas, Error, SampleMode, WTileSet, WTileVariation};
+use rusttype::{FontCollection, Scale};
 use std::path::Path;
 use structopt::StructOpt;
-use ts::image::{DynamicImage, GenericImage, GenericImageView};
+use ts::image::{DynamicImage, GenericImage, GenericImageView, Rgba};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "omega-tile", about = "ω-tile generator")]
@@ -20,7 +22,7 @@ enum Command {
         input: String,
         size: u32,
 
-        #[structopt(short,long, default_value = "100")]
+        #[structopt(short, long, default_value = "100")]
         seed: u64,
     },
     TestSet {
@@ -35,7 +37,7 @@ enum Command {
 
         size: u32,
 
-        #[structopt(short,long, default_value = "100")]
+        #[structopt(short, long, default_value = "100")]
         seed: u64,
     },
 }
@@ -60,6 +62,49 @@ fn build_combine_img(atlas: &Atlas) -> Result<DynamicImage, Error> {
         }
     }
     Ok(combined)
+}
+
+fn draw_number(
+    image: &mut DynamicImage,
+    n: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Result<(), Error> {
+    let font = Vec::from(include_bytes!("DejaVuSans.ttf") as &[u8]);
+    let font = FontCollection::from_bytes(font)
+        .unwrap()
+        .into_font()
+        .unwrap();
+
+    let height = 12.4;
+    let scale = Scale {
+        x: height * 2.0,
+        y: height,
+    };
+
+    drawing::draw_text_mut(
+        image,
+        Rgba([0u8, 0u8, 255u8, 255u8]),
+        x,
+        y,
+        scale,
+        &font,
+        &n.to_string(),
+    );
+
+    drawing::draw_text_mut(
+        image,
+        Rgba([0u8, 0u8, 255u8, 255u8]),
+        x + w - (height.ceil() as u32) * (n.to_string().len() as u32),
+        y + h - (height.ceil() as u32),
+        scale,
+        &font,
+        &n.to_string(),
+    );
+
+    Ok(())
 }
 
 fn build_tileset(tiles: &WTileSet) -> Result<DynamicImage, Error> {
@@ -87,6 +132,15 @@ fn build_tileset(tiles: &WTileSet) -> Result<DynamicImage, Error> {
         ) {
             Err(Error::SizeMismatch)?;
         }
+
+        draw_number(
+            &mut combined,
+            i as u32,
+            (x as u32) * dim.0,
+            (y as u32) * dim.1,
+            dim.0,
+            dim.1,
+        )?;
     }
 
     Ok(combined)
@@ -106,7 +160,7 @@ fn main() -> Result<(), Error> {
             variation,
             combined,
             print_index,
-            seed
+            seed,
         } => {
             let output = Path::new(&input)
                 .file_stem()
@@ -124,8 +178,12 @@ fn main() -> Result<(), Error> {
             let (tiles, samples) = omega_tile::build(SampleMode::Split, &input, variation)?;
             for (i, it) in samples.iter().enumerate() {
                 let name = format!("out/{}_samples{}.png", output, i + 1);
-                it.save(&name)
-                    .map_err(|e| Error::General((Box::new(e.into()), format!("Fail to save samples to {}", name))))?;
+                it.save(&name).map_err(|e| {
+                    Error::General((
+                        Box::new(e.into()),
+                        format!("Fail to save samples to {}", name),
+                    ))
+                })?;
             }
 
             // for (i, t) in tiles.iter().enumerate() {
@@ -164,7 +222,7 @@ fn main() -> Result<(), Error> {
             combined,
             variation,
             print_index,
-            seed
+            seed,
         } => {
             let output = "test_set";
             let tiles = omega_tile::build_testset(variation)?;
