@@ -24,6 +24,9 @@ enum Command {
 
         #[structopt(short, long, default_value = "100")]
         seed: u64,
+
+        #[structopt(short, long)]
+        number: bool,
     },
     TestSet {
         #[structopt(short, long)]
@@ -39,6 +42,9 @@ enum Command {
 
         #[structopt(short, long, default_value = "100")]
         seed: u64,
+
+        #[structopt(short, long)]
+        number: bool
     },
 }
 
@@ -107,7 +113,7 @@ fn draw_number(
     Ok(())
 }
 
-fn build_tileset(tiles: &WTileSet) -> Result<DynamicImage, Error> {
+fn build_tileset(tiles: &WTileSet, with_number: bool) -> Result<DynamicImage, Error> {
     fn nearest_sqrt(n: u32) -> u32 {
         let mut i = 0u32;
         while n > i * i {
@@ -133,14 +139,16 @@ fn build_tileset(tiles: &WTileSet) -> Result<DynamicImage, Error> {
             Err(Error::SizeMismatch)?;
         }
 
-        draw_number(
-            &mut combined,
-            i as u32,
-            (x as u32) * dim.0,
-            (y as u32) * dim.1,
-            dim.0,
-            dim.1,
-        )?;
+        if with_number {
+            draw_number(
+                &mut combined,
+                i as u32,
+                (x as u32) * dim.0,
+                (y as u32) * dim.1,
+                dim.0,
+                dim.1,
+            )?;
+        }
     }
 
     Ok(combined)
@@ -161,6 +169,7 @@ fn main() -> Result<(), Error> {
             combined,
             print_index,
             seed,
+            number
         } => {
             let output = Path::new(&input)
                 .file_stem()
@@ -207,7 +216,7 @@ fn main() -> Result<(), Error> {
                 output, combined_size, combined_size, variation, seed
             ))?;
 
-            let tileset = build_tileset(&tiles)?;
+            let tileset = build_tileset(&tiles, number)?;
             tileset.save(format!(
                 "out/{}_tileset_{}x{}_{}_{}.png",
                 output, combined_size, combined_size, variation, seed
@@ -223,6 +232,7 @@ fn main() -> Result<(), Error> {
             variation,
             print_index,
             seed,
+            number
         } => {
             let output = "test_set";
             let tiles = omega_tile::build_testset(variation)?;
@@ -244,7 +254,7 @@ fn main() -> Result<(), Error> {
                 output, combined_size, combined_size, variation, seed
             ))?;
 
-            let tileset = build_tileset(&tiles)?;
+            let tileset = build_tileset(&tiles, number)?;
             tileset.save(format!(
                 "out/{}_tileset_{}x{}_{}_{}.png",
                 output, combined_size, combined_size, variation, seed
