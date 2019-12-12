@@ -5,7 +5,7 @@
 ## Omega Tile Generator
 
 #### Clean Cache
-cargo run -- clean
+cargo run --release -- clean
 
 #### Generate tileset in out directory
-cargo run -- build imgs/grass.png 256 --seed 102 --variation v16
+cargo run --release -- build imgs/grass.png 256 --seed 102 --variation v16
