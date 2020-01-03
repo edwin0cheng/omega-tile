@@ -423,10 +423,10 @@ pub fn build_testset(variation: WTileVariation) -> Result<WTileSet, Error> {
             }
         }
 
-        let mut r_img = DynamicImage::new_rgb8(256, 256);
-        let mut g_img = DynamicImage::new_rgb8(256, 256);
-        let mut b_img = DynamicImage::new_rgb8(256, 256);
-        let mut y_img = DynamicImage::new_rgb8(256, 256);
+        let mut r_img = DynamicImage::new_rgb8(128, 128);
+        let mut g_img = DynamicImage::new_rgb8(128, 128);
+        let mut b_img = DynamicImage::new_rgb8(128, 128);
+        let mut y_img = DynamicImage::new_rgb8(128, 128);
 
         fill(&mut r_img, Rgba::from_channels(255, 0, 0, 255));
         fill(&mut g_img, Rgba::from_channels(0, 255, 0, 255));
