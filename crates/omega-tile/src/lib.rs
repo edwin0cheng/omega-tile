@@ -9,13 +9,11 @@
 mod atlas;
 pub mod cache;
 mod error;
-mod report;
 mod wtile;
 
 use imageproc::drawing::draw_filled_circle_mut;
 use std::path::Path;
 
-use report::SimpleProgressReport;
 use wtile::WTile;
 
 pub use atlas::{build_atlas, Atlas};
@@ -24,6 +22,10 @@ pub use texture_synthesis as ts;
 use ts::image::{DynamicImage, GenericImage, GenericImageView, Luma, Pixel, Rgba};
 
 pub type WTileSet = Vec<WTile>;
+
+pub trait Report {
+    fn sub_progress_bar(&mut self, name: &str) -> Box<dyn ts::GeneratorProgress>;
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum WTileVariation {
@@ -55,13 +57,13 @@ impl std::fmt::Display for WTileVariation {
             WTileVariation::V16 => "v16",
             WTileVariation::Full => "full",
         };
-        
+
         write!(f, "{}", s)
     }
 }
 
 struct WTileContext {
-    pb: SimpleProgressReport,
+    pb: Box<dyn Report>,
 }
 
 impl WTileContext {
@@ -78,7 +80,7 @@ impl WTileContext {
                     img.dimensions()
                 };
 
-                let build_sample = |id| -> Result<_, Error> {
+                let mut build_sample = |id| -> Result<_, Error> {
                     let key = format!(
                         "{}+{}+{}+{}+samples",
                         dim.0,
@@ -95,7 +97,7 @@ impl WTileContext {
                             .seed(id)
                             .build()?;
                         let generated =
-                            texsynth.run(Some(Box::new(self.pb.new_sub_progress("build sample"))));
+                            texsynth.run(Some(self.pb.sub_progress_bar("build sample")));
                         let img = generated.into_image();
                         cache::write_cache(&key, &img)?;
                         Ok(img)
@@ -236,7 +238,7 @@ impl WTileContext {
             )
             .build()?;
 
-        let generated = texsynth.run(Some(Box::new(self.pb.new_sub_progress("build tile"))));
+        let generated = texsynth.run(Some(self.pb.sub_progress_bar("build tile")));
 
         Ok(generated.into_image())
     }
@@ -392,9 +394,14 @@ pub enum SampleMode {
     Split,
 }
 
-pub fn build(mode: SampleMode, base: &str, variation: WTileVariation) -> Result<(WTileSet, Vec<DynamicImage>), Error> {
+pub fn build(
+    mode: SampleMode,
+    base: &str,
+    variation: WTileVariation,
+    report: impl Report + 'static,
+) -> Result<(WTileSet, Vec<DynamicImage>), Error> {
     let mut ctx = WTileContext {
-        pb: SimpleProgressReport::new(),
+        pb: Box::new(report),
     };
 
     let samples = ctx
@@ -403,12 +410,18 @@ pub fn build(mode: SampleMode, base: &str, variation: WTileVariation) -> Result<
 
     let mask = ctx.build_mask(samples[0].dimensions())?;
 
-    Ok((ctx.build_n_w_tiles(variation, &samples, &mask, &base)?, samples))
+    Ok((
+        ctx.build_n_w_tiles(variation, &samples, &mask, &base)?,
+        samples,
+    ))
 }
 
-pub fn build_testset(variation: WTileVariation) -> Result<WTileSet, Error> {
+pub fn build_testset(
+    variation: WTileVariation,
+    report: impl Report + 'static,
+) -> Result<WTileSet, Error> {
     let mut ctx = WTileContext {
-        pb: SimpleProgressReport::new(),
+        pb: Box::new(report),
     };
 
     let samples = {

@@ -1,9 +1,13 @@
+mod report;
+
 use imageproc::drawing;
 use omega_tile::{cache, ts, Atlas, Error, SampleMode, WTileSet, WTileVariation};
 use rusttype::{FontCollection, Scale};
 use std::path::Path;
 use structopt::StructOpt;
 use ts::image::{DynamicImage, GenericImage, GenericImageView, Rgba};
+
+use report::SimpleProgressReport;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "omega-tile", about = "ω-tile generator")]
@@ -44,7 +48,7 @@ enum Command {
         seed: u64,
 
         #[structopt(short, long)]
-        number: bool
+        number: bool,
     },
 }
 
@@ -169,7 +173,7 @@ fn main() -> Result<(), Error> {
             combined,
             print_index,
             seed,
-            number
+            number,
         } => {
             let output = Path::new(&input)
                 .file_stem()
@@ -184,7 +188,12 @@ fn main() -> Result<(), Error> {
                     )
                 })?;
 
-            let (tiles, samples) = omega_tile::build(SampleMode::Split, &input, variation)?;
+            let (tiles, samples) = omega_tile::build(
+                SampleMode::Split,
+                &input,
+                variation,
+                SimpleProgressReport::new(),
+            )?;
             for (i, it) in samples.iter().enumerate() {
                 let name = format!("out/{}_samples{}.png", output, i + 1);
                 it.save(&name).map_err(|e| {
@@ -194,10 +203,6 @@ fn main() -> Result<(), Error> {
                     ))
                 })?;
             }
-
-            // for (i, t) in tiles.iter().enumerate() {
-            //     t.img.save(format!("out/{}_final{}.png", output, i + 1))?;
-            // }
 
             let combined_size = size;
             let atlas = omega_tile::build_atlas(&tiles, combined_size, seed);
@@ -232,10 +237,10 @@ fn main() -> Result<(), Error> {
             variation,
             print_index,
             seed,
-            number
+            number,
         } => {
             let output = "test_set";
-            let tiles = omega_tile::build_testset(variation)?;
+            let tiles = omega_tile::build_testset(variation, SimpleProgressReport::new())?;
 
             let combined_size = size;
             let atlas = omega_tile::build_atlas(&tiles, combined_size, seed);
