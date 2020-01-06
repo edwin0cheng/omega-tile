@@ -126,18 +126,10 @@ impl WTileContext {
                 let half = dims.0 / 2;
                 let mut result: Vec<DynamicImage> = vec![];
 
-                result.push(DynamicImage::ImageRgba8(
-                    img.view(0, 0, half, half).to_image(),
-                ));
-                result.push(DynamicImage::ImageRgba8(
-                    img.view(0, half, half, half).to_image(),
-                ));
-                result.push(DynamicImage::ImageRgba8(
-                    img.view(half, 0, half, half).to_image(),
-                ));
-                result.push(DynamicImage::ImageRgba8(
-                    img.view(half, half, half, half).to_image(),
-                ));
+                result.push(DynamicImage::ImageRgba8(img.view(0, 0, half, half).to_image()));
+                result.push(DynamicImage::ImageRgba8(img.view(0, half, half, half).to_image()));
+                result.push(DynamicImage::ImageRgba8(img.view(half, 0, half, half).to_image()));
+                result.push(DynamicImage::ImageRgba8(img.view(half, half, half, half).to_image()));
 
                 return Ok(result);
 
@@ -400,9 +392,7 @@ pub fn build(
     variation: WTileVariation,
     report: impl Report + 'static,
 ) -> Result<(WTileSet, Vec<DynamicImage>), Error> {
-    let mut ctx = WTileContext {
-        pb: Box::new(report),
-    };
+    let mut ctx = WTileContext { pb: Box::new(report) };
 
     let samples = ctx
         .build_samples(mode, &base)
@@ -410,19 +400,14 @@ pub fn build(
 
     let mask = ctx.build_mask(samples[0].dimensions())?;
 
-    Ok((
-        ctx.build_n_w_tiles(variation, &samples, &mask, &base)?,
-        samples,
-    ))
+    Ok((ctx.build_n_w_tiles(variation, &samples, &mask, &base)?, samples))
 }
 
 pub fn build_testset(
     variation: WTileVariation,
     report: impl Report + 'static,
 ) -> Result<WTileSet, Error> {
-    let mut ctx = WTileContext {
-        pb: Box::new(report),
-    };
+    let mut ctx = WTileContext { pb: Box::new(report) };
 
     let samples = {
         let mut samples: Vec<DynamicImage> = Vec::new();

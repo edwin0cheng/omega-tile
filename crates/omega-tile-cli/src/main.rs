@@ -83,16 +83,10 @@ fn draw_number(
     h: u32,
 ) -> Result<(), Error> {
     let font = Vec::from(include_bytes!("DejaVuSans.ttf") as &[u8]);
-    let font = FontCollection::from_bytes(font)
-        .unwrap()
-        .into_font()
-        .unwrap();
+    let font = FontCollection::from_bytes(font).unwrap().into_font().unwrap();
 
     let height = 12.4;
-    let scale = Scale {
-        x: height * 2.0,
-        y: height,
-    };
+    let scale = Scale { x: height * 2.0, y: height };
 
     drawing::draw_text_mut(
         image,
@@ -166,15 +160,7 @@ fn main() -> Result<(), Error> {
             cache::clear_cache();
             println!("Image cache is clean.");
         }
-        Command::Build {
-            input,
-            size,
-            variation,
-            combined,
-            print_index,
-            seed,
-            number,
-        } => {
+        Command::Build { input, size, variation, combined, print_index, seed, number } => {
             let output = Path::new(&input)
                 .file_stem()
                 .ok_or_else(|| {
@@ -231,14 +217,7 @@ fn main() -> Result<(), Error> {
                 println!("{}", atlas);
             }
         }
-        Command::TestSet {
-            size,
-            combined,
-            variation,
-            print_index,
-            seed,
-            number,
-        } => {
+        Command::TestSet { size, combined, variation, print_index, seed, number } => {
             let output = "test_set";
             let tiles = omega_tile::build_testset(variation, SimpleProgressReport::new())?;
 

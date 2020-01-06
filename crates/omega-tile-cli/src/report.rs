@@ -10,9 +10,7 @@ pub struct SimpleProgressReport {
 
 impl SimpleProgressReport {
     pub fn new() -> SimpleProgressReport {
-        SimpleProgressReport {
-            ctx: Rc::new(RefCell::new(SimpleProgressContext::new())),
-        }
+        SimpleProgressReport { ctx: Rc::new(RefCell::new(SimpleProgressContext::new())) }
     }
 }
 
@@ -21,9 +19,7 @@ impl Report for SimpleProgressReport {
         let mut ctx = self.ctx.borrow_mut();
         ctx.stage_num = 0;
         ctx.total_pb.set_message(title);
-        Box::new(SubProgressReport {
-            ctx: self.ctx.clone(),
-        })
+        Box::new(SubProgressReport { ctx: self.ctx.clone() })
     }
 }
 

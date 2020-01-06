@@ -34,10 +34,7 @@ impl Atlas {
     }
 
     pub fn dimensions(&self) -> (u32, u32) {
-        (
-            self.tile_dimensions.0 * self.n,
-            self.tile_dimensions.1 * self.n,
-        )
+        (self.tile_dimensions.0 * self.n, self.tile_dimensions.1 * self.n)
     }
 
     pub fn size(&self) -> u32 {
@@ -54,9 +51,7 @@ impl Atlas {
 
         for y in 0..self.n {
             for x in 0..self.n {
-                let (id, _) = self
-                    .get(x as i32, y as i32)
-                    .expect("Altas is not completed");
+                let (id, _) = self.get(x as i32, y as i32).expect("Altas is not completed");
 
                 img.put_pixel(x, y, Luma([id as u8]));
             }
@@ -70,9 +65,7 @@ impl fmt::Display for Atlas {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for y in 0..self.n {
             for x in 0..self.n {
-                let (id, _) = self
-                    .get(x as i32, y as i32)
-                    .expect("Altas is not completed");
+                let (id, _) = self.get(x as i32, y as i32).expect("Altas is not completed");
 
                 if x == (self.n - 1) && y != (self.n - 1) {
                     writeln!(f, "{:02}", id)?;
@@ -126,9 +119,5 @@ pub fn build_atlas(tiles: &Vec<WTile>, n: u32, seed: u64) -> Atlas {
         }
     }
 
-    Atlas {
-        data: atlas,
-        n,
-        tile_dimensions: tiles[0].img.dimensions(),
-    }
+    Atlas { data: atlas, n, tile_dimensions: tiles[0].img.dimensions() }
 }
