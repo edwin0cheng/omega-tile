@@ -61,8 +61,12 @@ impl ts::GeneratorProgress for DummyProgress {
         let total_percent = (info.total.current as f64) / (info.total.total as f64) * 100.0;
 
         let s = format!(
-            "{}: [stage: {:05.2}, total: {:05.2}]",
-            self.name, stage_percent, total_percent,
+            "{}: [{:02}/{:02}] [stage: {:05.2}, total: {:05.2}]",
+            self.section.name,
+            self.section.current,
+            self.section.total,
+            stage_percent,
+            total_percent,
         );
         self.tx.send(Arc::new(s)).unwrap();
     }
@@ -70,12 +74,15 @@ impl ts::GeneratorProgress for DummyProgress {
 
 struct DummyProgress {
     tx: Arc<Sender<Arc<String>>>,
-    name: String,
+    section: omega_tile::ReportSection,
 }
 
 impl omega_tile::Report for DummyReport {
-    fn sub_progress_bar(&mut self, name: &str) -> Box<dyn ts::GeneratorProgress> {
-        Box::new(DummyProgress { name: name.to_owned(), tx: self.tx.clone() })
+    fn sub_progress_bar(
+        &mut self,
+        section: omega_tile::ReportSection,
+    ) -> Box<dyn ts::GeneratorProgress> {
+        Box::new(DummyProgress { section, tx: self.tx.clone() })
     }
 }
 

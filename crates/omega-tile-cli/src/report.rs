@@ -1,5 +1,5 @@
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use omega_tile::Report;
+use omega_tile::{Report, ReportSection};
 use std::cell::RefCell;
 use std::rc::Rc;
 use texture_synthesis as ts;
@@ -15,10 +15,10 @@ impl SimpleProgressReport {
 }
 
 impl Report for SimpleProgressReport {
-    fn sub_progress_bar(&mut self, title: &str) -> Box<dyn ts::GeneratorProgress> {
+    fn sub_progress_bar(&mut self, section: ReportSection) -> Box<dyn ts::GeneratorProgress> {
         let mut ctx = self.ctx.borrow_mut();
         ctx.stage_num = 0;
-        ctx.total_pb.set_message(title);
+        ctx.total_pb.set_message(&section.name);
         Box::new(SubProgressReport { ctx: self.ctx.clone() })
     }
 }

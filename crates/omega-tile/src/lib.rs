@@ -25,8 +25,20 @@ use ts::image::{DynamicImage, GenericImage, GenericImageView, Luma, Pixel, Rgba}
 
 pub type WTileSet = Vec<WTile>;
 
+pub struct ReportSection {
+    pub name: String,
+    pub current: usize,
+    pub total: usize,
+}
+
+impl ReportSection {
+    fn new(name: &str, (current, total): (usize, usize)) -> ReportSection {
+        ReportSection { name: name.to_owned(), current, total }
+    }
+}
+
 pub trait Report {
-    fn sub_progress_bar(&mut self, name: &str) -> Box<dyn ts::GeneratorProgress>;
+    fn sub_progress_bar(&mut self, section: ReportSection) -> Box<dyn ts::GeneratorProgress>;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -83,7 +95,7 @@ impl WTileContext {
                     img.dimensions()
                 };
 
-                let mut build_sample = |id| -> Result<_, Error> {
+                let mut build_sample = |id, progress: (usize, usize)| -> Result<_, Error> {
                     let key = format!(
                         "{}+{}+{}+{}+samples",
                         dim.0,
@@ -99,8 +111,9 @@ impl WTileContext {
                             .output_size(ts::Dims::new(dim.0, dim.1))
                             .seed(id)
                             .build()?;
+                        let report_section = ReportSection::new("build sample", progress);
                         let generated =
-                            texsynth.run(Some(self.pb.sub_progress_bar("build sample")));
+                            texsynth.run(Some(self.pb.sub_progress_bar(report_section)));
                         let img = generated.into_image();
                         if let Some(cache) = self.cache.as_mut() {
                             cache.write_cache(&key, &img)?;
@@ -110,8 +123,8 @@ impl WTileContext {
                 };
 
                 let mut result = vec![];
-                for i in 1..=4 {
-                    result.push(build_sample(i)?);
+                for i in 0..4 {
+                    result.push(build_sample(i - 1, (i as usize, 4 as usize))?);
                 }
                 Ok(result)
             }
@@ -208,16 +221,13 @@ impl WTileContext {
         Ok(res)
     }
 
-    fn build_tile<Q>(
+    fn build_tile(
         &mut self,
         merged: &DynamicImage,
         mask: &DynamicImage,
-        _base: Q,
         samples: &[DynamicImage],
-    ) -> Result<DynamicImage, Error>
-    where
-        Q: AsRef<Path>,
-    {
+        progress: (usize, usize),
+    ) -> Result<DynamicImage, Error> {
         let output_dim = mask.dimensions();
 
         let examples: Vec<_> = samples.iter().map(|it| it.clone()).collect();
@@ -235,7 +245,8 @@ impl WTileContext {
             )
             .build()?;
 
-        let generated = texsynth.run(Some(self.pb.sub_progress_bar("build tile")));
+        let report_section = ReportSection::new("build tile", progress);
+        let generated = texsynth.run(Some(self.pb.sub_progress_bar(report_section)));
 
         Ok(generated.into_image())
     }
@@ -245,7 +256,7 @@ impl WTileContext {
         mut gen: F,
     ) -> Result<Vec<WTile>, Error>
     where
-        F: FnMut(usize, usize, usize, usize) -> Result<DynamicImage, Error>,
+        F: FnMut(usize, usize, usize, usize, (usize, usize)) -> Result<DynamicImage, Error>,
     {
         macro_rules! rgby {
             (R) => {
@@ -265,8 +276,8 @@ impl WTileContext {
         let mut res = vec![];
 
         macro_rules! make_tile {
-            ($a:ident, $b:ident, $c:ident, $d:ident) => {
-                let img = gen(rgby!($a), rgby!($b), rgby!($c), rgby!($d))?;
+            ($a:ident, $b:ident, $c:ident, $d:ident, $total:expr) => {
+                let img = gen(rgby!($a), rgby!($b), rgby!($c), rgby!($d), (res.len(), $total))?;
                 res.push(WTile::new(img, rgby!($a), rgby!($b), rgby!($c), rgby!($d)));
             };
         }
@@ -274,13 +285,16 @@ impl WTileContext {
         match n_tiles {
             // 4
             WTileVariation::V4 => {
+                let count = 4;
                 // Figure 7(a)
-                make_tile!(R, G, B, Y);
-                make_tile!(G, B, Y, R);
-                make_tile!(B, Y, R, G);
-                make_tile!(Y, R, G, B);
+                make_tile!(R, G, B, Y, count);
+                make_tile!(G, B, Y, R, count);
+                make_tile!(B, Y, R, G, count);
+                make_tile!(Y, R, G, B, count);
             }
             WTileVariation::V16 => {
+                let count = 16;
+
                 // // Figure 8(b)
                 // make_tile!(R, G, G, Y);
                 // make_tile!(R, B, G, R);
@@ -303,25 +317,25 @@ impl WTileContext {
                 // make_tile!(G, Y, Y, G);
 
                 // Figure 8(a)
-                make_tile!(R, G, G, B);
-                make_tile!(R, B, G, Y);
-                make_tile!(R, G, B, Y);
-                make_tile!(R, B, B, R);
+                make_tile!(R, G, G, B, count);
+                make_tile!(R, B, G, Y, count);
+                make_tile!(R, G, B, Y, count);
+                make_tile!(R, B, B, R, count);
 
-                make_tile!(G, B, B, Y);
-                make_tile!(G, Y, B, R);
-                make_tile!(G, B, Y, R);
-                make_tile!(G, Y, Y, G);
+                make_tile!(G, B, B, Y, count);
+                make_tile!(G, Y, B, R, count);
+                make_tile!(G, B, Y, R, count);
+                make_tile!(G, Y, Y, G, count);
 
-                make_tile!(B, Y, Y, R);
-                make_tile!(B, R, Y, G);
-                make_tile!(B, Y, R, G);
-                make_tile!(B, R, R, B);
+                make_tile!(B, Y, Y, R, count);
+                make_tile!(B, R, Y, G, count);
+                make_tile!(B, Y, R, G, count);
+                make_tile!(B, R, R, B, count);
 
-                make_tile!(Y, R, R, G);
-                make_tile!(Y, G, R, B);
-                make_tile!(Y, R, G, B);
-                make_tile!(Y, G, G, Y);
+                make_tile!(Y, R, R, G, count);
+                make_tile!(Y, G, R, B, count);
+                make_tile!(Y, R, G, B, count);
+                make_tile!(Y, G, G, Y, count);
             }
 
             WTileVariation::Full => {
@@ -329,7 +343,7 @@ impl WTileContext {
                     for b in 0..4 {
                         for c in 0..4 {
                             for d in 0..4 {
-                                let img = gen(a, b, c, d)?;
+                                let img = gen(a, b, c, d, (res.len(), 4 * 4 * 4 * 4))?;
                                 res.push(WTile::new(img, a, b, c, d));
                             }
                         }
@@ -351,13 +365,13 @@ impl WTileContext {
     where
         Q: AsRef<Path> + std::fmt::Display,
     {
-        Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
+        Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d, progress: (usize, usize)| {
             let key = format!("{}+{}+{}+{}+{}+{}", n_tiles, base, a, b, c, d);
             let img = if let Some(img) = self.cache.as_mut().and_then(|it| it.read_cache(&key)) {
                 img
             } else {
                 let merged = self.merge_samples(&samples, a, b, c, d)?;
-                let img = self.build_tile(&merged, &mask, &base, &samples)?;
+                let img = self.build_tile(&merged, &mask, &samples, progress)?;
                 if let Some(cache) = self.cache.as_mut() {
                     cache.write_cache(&key, &img)?;
                 }
@@ -373,7 +387,7 @@ impl WTileContext {
         n_tiles: WTileVariation,
         samples: &[DynamicImage],
     ) -> Result<Vec<WTile>, Error> {
-        Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
+        Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d, _| {
             let key = format!("{}+{}+{}+{}+{}+{}", n_tiles, "test", a, b, c, d);
             let img = if let Some(img) = self.cache.as_mut().and_then(|it| it.read_cache(&key)) {
                 img
