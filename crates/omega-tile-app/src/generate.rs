@@ -5,6 +5,7 @@ use std::path::Path;
 use ts::image::{DynamicImage, GenericImage, GenericImageView};
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::sync::{
     mpsc::{channel, Receiver, Sender, TryRecvError},
     Arc,
@@ -20,34 +21,41 @@ pub struct GenerateOptions {
 
 #[must_use]
 pub struct Handle {
-    inner: RefCell<Option<thread::JoinHandle<Result<(), Error>>>>,
+    inner: RefCell<Option<thread::JoinHandle<Result<PathBuf, Error>>>>,
     rx: Arc<Receiver<Arc<String>>>,
-    last: RefCell<String>,
+    last: RefCell<HandleResult<String>>,
+}
+
+#[derive(Clone)]
+pub enum HandleResult<T> {
+    Ok(T),
+    Fail(Arc<Error>),
+    Success(PathBuf),
 }
 
 impl Handle {
-    pub fn get(&self) -> Option<String> {
-        if self.inner.borrow().is_none() {
-            return None;
-        }
-
+    pub fn get(&self) -> HandleResult<String> {
         let last = self.last.borrow().clone();
 
+        if self.inner.borrow().is_none() {
+            return last;
+        }
+
         *self.last.borrow_mut() = match self.rx.try_recv() {
-            Result::Ok(s) => (*s).clone(),
+            Result::Ok(s) => HandleResult::Ok((*s).clone()),
             Result::Err(err) => match err {
-                TryRecvError::Empty => return Some(last),
+                TryRecvError::Empty => return last,
                 TryRecvError::Disconnected => {
-                    let res = self.inner.borrow_mut().take()?.join().unwrap();
-                    if let Err(err) = res {
-                        eprintln!("Error on generation : {}", err);
+                    let res = self.inner.borrow_mut().take().unwrap().join().unwrap();
+                    match res {
+                        Result::Err(it) => HandleResult::Fail(Arc::new(it)),
+                        Result::Ok(it) => HandleResult::Success(it),
                     }
-                    return None;
                 }
             },
         };
 
-        Some(self.last.borrow().clone())
+        self.last.borrow().clone()
     }
 }
 
@@ -93,7 +101,7 @@ pub fn generate(input: &Path, output: &Path, opt: &GenerateOptions) -> Handle {
 
     let (tx, rx) = channel();
 
-    let t = thread::spawn(move || -> Result<(), Error> {
+    let t = thread::spawn(move || -> Result<std::path::PathBuf, Error> {
         let report = DummyReport { tx: Arc::new(tx) };
 
         // FIXME: Use cache in app ?
@@ -106,11 +114,15 @@ pub fn generate(input: &Path, output: &Path, opt: &GenerateOptions) -> Handle {
         )?;
 
         let tileset = build_tileset(&tiles)?;
-        tileset.save(output)?;
-        Ok(())
+        tileset.save(output.clone())?;
+        Ok(output)
     });
 
-    Handle { inner: RefCell::new(Some(t)), rx: Arc::new(rx), last: RefCell::new(String::new()) }
+    Handle {
+        inner: RefCell::new(Some(t)),
+        rx: Arc::new(rx),
+        last: RefCell::new(HandleResult::Ok(String::new())),
+    }
 }
 
 fn build_tileset(tiles: &WTileSet) -> Result<DynamicImage, Error> {

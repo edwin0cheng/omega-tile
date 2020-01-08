@@ -15,16 +15,14 @@ impl Image {
     }
 }
 
-type DataType = Option<ImageData>;
-
-impl Widget<DataType> for Image {
-    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut DataType, _env: &Env) {}
+impl Widget<ImageData> for Image {
+    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut ImageData, _env: &Env) {}
 
     fn update(
         &mut self,
         _ctx: &mut UpdateCtx,
-        _old_data: Option<&DataType>,
-        _data: &DataType,
+        _old_data: Option<&ImageData>,
+        _data: &ImageData,
         _env: &Env,
     ) {
     }
@@ -33,22 +31,14 @@ impl Widget<DataType> for Image {
         &mut self,
         _ctx: &mut LayoutCtx,
         _bc: &BoxConstraints,
-        data: &DataType,
+        data: &ImageData,
         _env: &Env,
     ) -> Size {
-        if let Some(data) = data {
-            (data.0.width() as f64, data.0.height() as f64).into()
-        } else {
-            Size::ZERO
-        }
+        (data.0.width() as f64, data.0.height() as f64).into()
     }
 
-    fn paint(&mut self, paint_ctx: &mut PaintCtx, data: &DataType, _env: &Env) {
-        let img = match data {
-            Some(img) => img,
-            None => return,
-        };
-
+    fn paint(&mut self, paint_ctx: &mut PaintCtx, data: &ImageData, _env: &Env) {
+        let img = data;
         let size = (img.0.width() as usize, img.0.height() as usize);
 
         // FIXME: Draw image only in paint_ctx.region

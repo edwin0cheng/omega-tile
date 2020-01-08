@@ -5,6 +5,7 @@ macro_rules! L {
 }
 
 mod commands;
+mod enums;
 mod generate;
 mod menu;
 mod progress;
@@ -12,16 +13,18 @@ mod widgets;
 
 use druid::widget::{Button, Either, Flex, Label, WidgetExt};
 use druid::{
-    AppDelegate, AppLauncher, Application, Data, DelegateCtx, Env, Event, EventCtx, Lens,
-    LocalizedString, Widget, WindowDesc, WindowId,
+    lens, AppDelegate, AppLauncher, Application, Data, DelegateCtx, Env, Event, EventCtx, Lens,
+    LensExt, LocalizedString, Widget, WindowDesc, WindowId,
 };
 
+use enums::Enum;
+use generate::HandleResult;
 use omega_tile::ts::image;
 use std::collections::HashSet;
 use std::sync::Arc;
 
 fn main() {
-    let app = AppData { img: None, path: None, in_progress: None };
+    let app = AppData { make: None };
 
     let main_window = WindowDesc::new(ui_builder)
         .title(L!("omega-tile-app-name"))
@@ -36,11 +39,7 @@ fn main() {
         .expect("launch failed");
 }
 
-fn ui_builder() -> impl Widget<AppData> {
-    let name = |data: &AppData, _: &Env| {
-        data.path.as_ref().map(|it| it.to_string_lossy()).unwrap_or("".into()).to_string()
-    };
-
+fn ui_make_builder() -> impl Widget<Make> {
     let controls = Button::sized(
         L!("Generate"),
         |ctx: &mut EventCtx, _, _| ctx.submit_command(commands::GENERATE_TILES, ctx.window_id()),
@@ -48,25 +47,56 @@ fn ui_builder() -> impl Widget<AppData> {
         30.0,
     );
 
-    let main_content = Flex::column()
-        .with_child(Label::new(name).center(), 0.0)
-        .with_child(widgets::Image::new().lens(AppData::img).center(), 0.0)
+    let finish_label = Label::new(|data: &Make, _: &Env| match &data.in_progress {
+        None | Some(HandleData::InProgress(_)) => String::new(),
+        Some(HandleData::Finish(status)) => match status.as_ref() {
+            HandleResult::Ok(_) => String::new(),
+            HandleResult::Fail(_) => "Generating Fail.".to_string(),
+            HandleResult::Success(path) => format!("Done. ({})", path.to_string_lossy()),
+        },
+    });
+
+    Flex::column()
         .with_child(
-            Either::new(
-                |data: &AppData, _| data.in_progress.is_some(),
-                progress::Progress::new().lens(AppData::in_progress),
-                controls,
+            Label::new(|data: &Make, _: &Env| data.path.to_string_lossy().to_string()).center(),
+            0.0,
+        )
+        .with_child(widgets::Image::new().lens(Make::img).center(), 0.0)
+        .with_child(
+            Enum::new(ProgressMode::Ready, |data: &Make, _| match data.in_progress.as_ref() {
+                None => ProgressMode::Ready,
+                Some(it) => match it {
+                    HandleData::InProgress(_) => ProgressMode::InProgress,
+                    HandleData::Finish(_) => ProgressMode::Finish,
+                },
+            })
+            .with_branch(ProgressMode::Ready, controls)
+            .with_branch(
+                ProgressMode::InProgress,
+                progress::Progress::new().lens(Make::in_progress),
             )
+            .with_branch(ProgressMode::Finish, finish_label)
             .padding(5.0)
             .center(),
             0.0,
         )
-        .center();
+        .center()
+}
+
+fn ui_builder() -> impl Widget<AppData> {
+    let maker = ui_make_builder();
 
     Flex::column().with_child(
         Either::new(
-            |app: &AppData, _| app.img.is_some(),
-            main_content,
+            |app: &AppData, _| app.make.is_some(),
+            maker.lens(lens::Id.map(
+                |app: &AppData| app.make.as_ref().unwrap().clone(),
+                |app: &mut AppData, make: Make| {
+                    if let Some(it) = app.make.as_mut() {
+                        *it = make;
+                    }
+                },
+            )),
             Label::new(L!("omega-tile-app-name")).center(),
         ),
         1.0,
@@ -76,11 +106,29 @@ fn ui_builder() -> impl Widget<AppData> {
 #[derive(Data, Clone)]
 struct ImageData(Arc<image::DynamicImage>);
 
+#[derive(Data, Clone)]
+enum HandleData {
+    InProgress(Arc<generate::Handle>),
+    Finish(Arc<HandleResult<String>>),
+}
+
+#[derive(Data, Clone, Eq, PartialEq, Hash)]
+enum ProgressMode {
+    Ready,
+    InProgress,
+    Finish,
+}
+
+#[derive(Data, Clone, Lens)]
+struct Make {
+    img: ImageData,
+    path: Arc<std::path::PathBuf>,
+    in_progress: Option<HandleData>,
+}
+
 #[derive(Data, Clone, Lens)]
 struct AppData {
-    img: Option<ImageData>,
-    path: Option<Arc<std::path::PathBuf>>,
-    in_progress: Option<Arc<generate::Handle>>,
+    make: Option<Make>,
 }
 
 type Error = anyhow::Error;
@@ -100,13 +148,17 @@ fn to_rgba(img: image::DynamicImage) -> image::RgbaImage {
 impl AppData {
     fn do_open_image(&mut self, path: &std::path::Path) -> Result<(), Error> {
         let img = image::open(path)?;
-        self.img = Some(ImageData(Arc::new(image::DynamicImage::ImageRgba8(to_rgba(img)))));
-        self.path = Some(Arc::new(path.to_path_buf()));
+        let make = Make {
+            img: ImageData(Arc::new(image::DynamicImage::ImageRgba8(to_rgba(img)))),
+            path: Arc::new(path.to_path_buf()),
+            in_progress: None,
+        };
+        self.make = Some(make);
         Ok(())
     }
 
     fn do_generate(&mut self, output_path: &std::path::Path) -> Result<(), Error> {
-        let path = self.path.as_ref().ok_or_else(|| anyhow::anyhow!("Current path is empty"))?;
+        let make = self.make.as_mut().ok_or_else(|| anyhow::anyhow!("Not in edit mode"))?;
 
         let options = generate::GenerateOptions {
             variation: omega_tile::WTileVariation::V16,
@@ -114,7 +166,11 @@ impl AppData {
             seed: 102,
         };
 
-        self.in_progress = Some(Arc::new(generate::generate(&path, output_path, &options)));
+        make.in_progress = Some(HandleData::InProgress(Arc::new(generate::generate(
+            &make.path,
+            output_path,
+            &options,
+        ))));
         Ok(())
     }
 }

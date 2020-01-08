@@ -1,4 +1,5 @@
-use crate::generate::Handle;
+use crate::generate::HandleResult;
+use crate::HandleData;
 use druid::widget;
 use druid::{
     BoxConstraints, Env, Event, EventCtx, LayoutCtx, PaintCtx, Point, Rect, Size, UpdateCtx,
@@ -10,7 +11,20 @@ pub struct Progress {
     inner: WidgetPod<String, Box<dyn Widget<String>>>,
 }
 
-type DataType = Option<Arc<Handle>>;
+type DataType = Option<HandleData>;
+
+fn in_progress(data: &DataType) -> Option<String> {
+    let data = data.as_ref()?;
+    let res = match data {
+        HandleData::InProgress(it) => it.get(),
+        HandleData::Finish(_) => return None,
+    };
+
+    match res {
+        HandleResult::Ok(s) => Some(s),
+        _ => None,
+    }
+}
 
 impl Widget<DataType> for Progress {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut DataType, env: &Env) {
@@ -23,14 +37,14 @@ impl Widget<DataType> for Progress {
             _ => (),
         };
 
-        if let Some(hdata) = data {
+        if let Some(HandleData::InProgress(hdata)) = data {
             match hdata.get() {
-                Some(mut s) => {
+                HandleResult::Ok(mut s) => {
                     self.inner.event(ctx, event, &mut s, env);
                     ctx.request_anim_frame();
                 }
-                None => {
-                    *data = None;
+                a @ HandleResult::Fail(_) | a @ HandleResult::Success(_) => {
+                    *data = Some(HandleData::Finish(Arc::new(a)));
                     ctx.invalidate();
                 }
             }
@@ -43,7 +57,7 @@ impl Widget<DataType> for Progress {
         data: &DataType,
         env: &Env,
     ) {
-        if let Some(s) = data.as_ref().and_then(|it| it.get()) {
+        if let Some(s) = in_progress(data) {
             self.inner.update(ctx, &s, env);
             ctx.invalidate();
         }
@@ -55,7 +69,7 @@ impl Widget<DataType> for Progress {
         data: &DataType,
         env: &Env,
     ) -> Size {
-        if let Some(s) = data.as_ref().and_then(|it| it.get()) {
+        if let Some(s) = in_progress(data) {
             let size = self.inner.layout(ctx, bc, &s, env);
             self.inner.set_layout_rect(Rect::from_origin_size(Point::ORIGIN, size));
             size
@@ -64,7 +78,7 @@ impl Widget<DataType> for Progress {
         }
     }
     fn paint(&mut self, paint_ctx: &mut PaintCtx, data: &DataType, env: &Env) {
-        if let Some(s) = data.as_ref().and_then(|it| it.get()) {
+        if let Some(s) = in_progress(data) {
             self.inner.paint_with_offset(paint_ctx, &s, env);
         }
     }
