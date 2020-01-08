@@ -7,7 +7,7 @@
 // https://unsplash.com/
 
 mod atlas;
-pub mod cache;
+mod cache;
 mod error;
 mod wtile;
 
@@ -17,8 +17,10 @@ use std::path::Path;
 use wtile::WTile;
 
 pub use atlas::{build_atlas, Atlas};
+pub use cache::Cache;
 pub use error::Error;
 pub use texture_synthesis as ts;
+
 use ts::image::{DynamicImage, GenericImage, GenericImageView, Luma, Pixel, Rgba};
 
 pub type WTileSet = Vec<WTile>;
@@ -64,6 +66,7 @@ impl std::fmt::Display for WTileVariation {
 
 struct WTileContext {
     pb: Box<dyn Report>,
+    cache: Option<Cache>,
 }
 
 impl WTileContext {
@@ -88,7 +91,7 @@ impl WTileContext {
                         &path.as_ref().to_string_lossy(),
                         id
                     );
-                    if let Some(img) = cache::read_cache(&key) {
+                    if let Some(img) = self.cache.as_mut().and_then(|it| it.read_cache(&key)) {
                         Ok(img)
                     } else {
                         let texsynth = ts::Session::builder()
@@ -99,7 +102,9 @@ impl WTileContext {
                         let generated =
                             texsynth.run(Some(self.pb.sub_progress_bar("build sample")));
                         let img = generated.into_image();
-                        cache::write_cache(&key, &img)?;
+                        if let Some(cache) = self.cache.as_mut() {
+                            cache.write_cache(&key, &img)?;
+                        }
                         Ok(img)
                     }
                 };
@@ -348,12 +353,14 @@ impl WTileContext {
     {
         Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
             let key = format!("{}+{}+{}+{}+{}+{}", n_tiles, base, a, b, c, d);
-            let img = if let Some(img) = cache::read_cache(&key) {
+            let img = if let Some(img) = self.cache.as_mut().and_then(|it| it.read_cache(&key)) {
                 img
             } else {
                 let merged = self.merge_samples(&samples, a, b, c, d)?;
                 let img = self.build_tile(&merged, &mask, &base, &samples)?;
-                cache::write_cache(&key, &img)?;
+                if let Some(cache) = self.cache.as_mut() {
+                    cache.write_cache(&key, &img)?;
+                }
                 img
             };
 
@@ -368,11 +375,13 @@ impl WTileContext {
     ) -> Result<Vec<WTile>, Error> {
         Self::build_n_w_tiles_with_generator(n_tiles, |a, b, c, d| {
             let key = format!("{}+{}+{}+{}+{}+{}", n_tiles, "test", a, b, c, d);
-            let img = if let Some(img) = cache::read_cache(&key) {
+            let img = if let Some(img) = self.cache.as_mut().and_then(|it| it.read_cache(&key)) {
                 img
             } else {
                 let img = self.merge_samples(&samples, a, b, c, d)?;
-                cache::write_cache(&key, &img)?;
+                if let Some(cache) = self.cache.as_mut() {
+                    cache.write_cache(&key, &img)?;
+                }
                 img
             };
 
@@ -391,8 +400,9 @@ pub fn build(
     base: &str,
     variation: WTileVariation,
     report: impl Report + 'static,
+    cache: Option<Cache>,
 ) -> Result<(WTileSet, Vec<DynamicImage>), Error> {
-    let mut ctx = WTileContext { pb: Box::new(report) };
+    let mut ctx = WTileContext { pb: Box::new(report), cache };
 
     let samples = ctx
         .build_samples(mode, &base)
@@ -406,8 +416,9 @@ pub fn build(
 pub fn build_testset(
     variation: WTileVariation,
     report: impl Report + 'static,
+    cache: Option<Cache>,
 ) -> Result<WTileSet, Error> {
-    let mut ctx = WTileContext { pb: Box::new(report) };
+    let mut ctx = WTileContext { pb: Box::new(report), cache };
 
     let samples = {
         let mut samples: Vec<DynamicImage> = Vec::new();

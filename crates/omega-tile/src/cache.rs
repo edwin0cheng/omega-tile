@@ -5,25 +5,33 @@ use std::fs::{self, ReadDir};
 use texture_synthesis as ts;
 use ts::image::DynamicImage;
 
-pub(crate) fn read_cache(key: &str) -> Option<DynamicImage> {
-    let mut hasher = Sha256::new();
-    hasher.input(key.as_bytes());
-    let h = hex::encode(hasher.result());
-    ts::image::open(format!("temp/{}.png", h)).ok()
-}
+pub struct Cache {}
 
-pub(crate) fn write_cache(key: &str, img: &DynamicImage) -> Result<(), Error> {
-    let mut hasher = Sha256::new();
-    hasher.input(key.as_bytes());
-    let h = hex::encode(hasher.result());
-    img.save(format!("temp/{}.png", h))?;
+impl Cache {
+    pub fn new() -> Cache {
+        Self {}
+    }
 
-    Ok(())
-}
+    pub(crate) fn read_cache(&self, key: &str) -> Option<DynamicImage> {
+        let mut hasher = Sha256::new();
+        hasher.input(key.as_bytes());
+        let h = hex::encode(hasher.result());
+        ts::image::open(format!("temp/{}.png", h)).ok()
+    }
 
-pub fn clear_cache() {
-    let cache_dir = fs::read_dir("temp");
-    delete_dir_contents(cache_dir);
+    pub(crate) fn write_cache(&self, key: &str, img: &DynamicImage) -> Result<(), Error> {
+        let mut hasher = Sha256::new();
+        hasher.input(key.as_bytes());
+        let h = hex::encode(hasher.result());
+        img.save(format!("temp/{}.png", h))?;
+
+        Ok(())
+    }
+
+    pub fn clear_cache(&self) {
+        let cache_dir = fs::read_dir("temp");
+        delete_dir_contents(cache_dir);
+    }
 }
 
 fn delete_dir_contents(read_dir_res: Result<ReadDir, std::io::Error>) {

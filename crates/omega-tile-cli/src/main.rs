@@ -1,7 +1,7 @@
 mod report;
 
 use imageproc::drawing;
-use omega_tile::{cache, ts, Atlas, Error, SampleMode, WTileSet, WTileVariation};
+use omega_tile::{ts, Atlas, Cache, Error, SampleMode, WTileSet, WTileVariation};
 use rusttype::{FontCollection, Scale};
 use std::path::Path;
 use structopt::StructOpt;
@@ -157,7 +157,7 @@ fn main() -> Result<(), Error> {
 
     match cmd {
         Command::Clean => {
-            cache::clear_cache();
+            Cache::new().clear_cache();
             println!("Image cache is clean.");
         }
         Command::Build { input, size, variation, combined, print_index, seed, number } => {
@@ -179,6 +179,7 @@ fn main() -> Result<(), Error> {
                 &input,
                 variation,
                 SimpleProgressReport::new(),
+                Some(Cache::new()),
             )?;
             for (i, it) in samples.iter().enumerate() {
                 let name = format!("out/{}_samples{}.png", output, i + 1);
@@ -219,7 +220,11 @@ fn main() -> Result<(), Error> {
         }
         Command::TestSet { size, combined, variation, print_index, seed, number } => {
             let output = "test_set";
-            let tiles = omega_tile::build_testset(variation, SimpleProgressReport::new())?;
+            let tiles = omega_tile::build_testset(
+                variation,
+                SimpleProgressReport::new(),
+                Some(Cache::new()),
+            )?;
 
             let combined_size = size;
             let atlas = omega_tile::build_atlas(&tiles, combined_size, seed);

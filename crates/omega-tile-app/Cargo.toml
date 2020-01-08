@@ -1,0 +1,11 @@
+[package]
+name = "omega-tile-app"
+version = "0.1.0"
+authors = ["Edwin Cheng <edwin0cheng@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+druid = "0.4"
+image = "0.22.3"
+omega-tile = {path="../omega-tile"}
+anyhow = "1.0.26"
