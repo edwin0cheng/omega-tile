@@ -21,23 +21,23 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 fn main() {
-    let app_state = AppState { img: None, path: None, in_progress: None };
+    let app = AppData { img: None, path: None, in_progress: None };
 
     let main_window = WindowDesc::new(ui_builder)
         .title(L!("omega-tile-app-name"))
-        .menu(menu::make_menu(&app_state))
+        .menu(menu::make_menu(&app))
         .window_size((800.0, 600.0));
 
     AppLauncher::with_window(main_window)
         .delegate(Delegate::default())
         .configure_env(|_env| {})
         // .use_simple_logger()
-        .launch(app_state)
+        .launch(app)
         .expect("launch failed");
 }
 
-fn ui_builder() -> impl Widget<AppState> {
-    let name = |data: &AppState, _: &Env| {
+fn ui_builder() -> impl Widget<AppData> {
+    let name = |data: &AppData, _: &Env| {
         data.path.as_ref().map(|it| it.to_string_lossy()).unwrap_or("".into()).to_string()
     };
 
@@ -50,11 +50,11 @@ fn ui_builder() -> impl Widget<AppState> {
 
     let main_content = Flex::column()
         .with_child(Label::new(name).center(), 0.0)
-        .with_child(widgets::Image::new().lens(AppState::img).center(), 0.0)
+        .with_child(widgets::Image::new().lens(AppData::img).center(), 0.0)
         .with_child(
             Either::new(
-                |data: &AppState, _| data.in_progress.is_some(),
-                progress::Progress::new().lens(AppState::in_progress),
+                |data: &AppData, _| data.in_progress.is_some(),
+                progress::Progress::new().lens(AppData::in_progress),
                 controls,
             )
             .padding(5.0)
@@ -65,7 +65,7 @@ fn ui_builder() -> impl Widget<AppState> {
 
     Flex::column().with_child(
         Either::new(
-            |app: &AppState, _| app.img.is_some(),
+            |app: &AppData, _| app.img.is_some(),
             main_content,
             Label::new(L!("omega-tile-app-name")).center(),
         ),
@@ -77,7 +77,7 @@ fn ui_builder() -> impl Widget<AppState> {
 struct ImageData(Arc<image::DynamicImage>);
 
 #[derive(Data, Clone, Lens)]
-struct AppState {
+struct AppData {
     img: Option<ImageData>,
     path: Option<Arc<std::path::PathBuf>>,
     in_progress: Option<Arc<generate::Handle>>,
@@ -97,7 +97,7 @@ fn to_rgba(img: image::DynamicImage) -> image::RgbaImage {
     }
 }
 
-impl AppState {
+impl AppData {
     fn do_open_image(&mut self, path: &std::path::Path) -> Result<(), Error> {
         let img = image::open(path)?;
         self.img = Some(ImageData(Arc::new(image::DynamicImage::ImageRgba8(to_rgba(img)))));
@@ -122,7 +122,7 @@ impl AppState {
 impl Delegate {
     fn handle_command(
         &mut self,
-        data: &mut AppState,
+        data: &mut AppData,
         ctx: &mut DelegateCtx,
         cmd: &druid::Command,
     ) -> Result<(), Error> {
@@ -158,11 +158,11 @@ impl Delegate {
     }
 }
 
-impl AppDelegate<AppState> for Delegate {
+impl AppDelegate<AppData> for Delegate {
     fn event(
         &mut self,
         event: Event,
-        data: &mut AppState,
+        data: &mut AppData,
         _env: &Env,
         ctx: &mut DelegateCtx,
     ) -> Option<Event> {
@@ -182,7 +182,7 @@ impl AppDelegate<AppState> for Delegate {
     fn window_added(
         &mut self,
         id: WindowId,
-        _data: &mut AppState,
+        _data: &mut AppData,
         _env: &Env,
         _ctx: &mut DelegateCtx,
     ) {
@@ -192,7 +192,7 @@ impl AppDelegate<AppState> for Delegate {
     fn window_removed(
         &mut self,
         id: WindowId,
-        _data: &mut AppState,
+        _data: &mut AppData,
         _env: &Env,
         _ctx: &mut DelegateCtx,
     ) {
