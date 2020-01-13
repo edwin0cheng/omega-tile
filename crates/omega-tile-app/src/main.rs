@@ -31,7 +31,7 @@ fn main() {
     let main_window = WindowDesc::new(ui_builder)
         .title(L!("omega-tile-app-name"))
         .menu(menu::make_menu(&app))
-        .window_size((800.0, 600.0));
+        .window_size((1024.0, 768.0));
 
     AppLauncher::with_window(main_window)
         .delegate(Delegate::default())
